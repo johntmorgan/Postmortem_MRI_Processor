@@ -143,33 +143,39 @@ def remove_boundaries(img_data, pct_border, background):
     for ax_index, ax_row in enumerate(img_data):
         for sag_index, sag_row in enumerate(ax_row):
             for cor_index, voxel in enumerate(sag_row):
-                if ax_index < pct_border * len(img_data) or ax_index > (len(img_data) - pct_border * len(img_data)):
+                if (ax_index < pct_border * len(img_data) or ax_index > 
+                    (len(img_data) - pct_border * len(img_data))):
                     img_data[ax_index][sag_index][cor_index] = background
-                if sag_index < pct_border * len(img_data) or sag_index > (len(img_data) - pct_border * len(img_data)):
+                if (sag_index < pct_border * len(img_data) or sag_index > 
+                    (len(img_data) - pct_border * len(img_data))):
                     img_data[ax_index][sag_index][cor_index] = background
         print ("border_strip row " + str(ax_index) + " done" + " time: " + 
                str(time.clock()))
     return img_data
 
 
-def isolation_check(search_dist, inclusion_req, ax_index, sag_index, cor_index, wm_min):
+def isolation_check(search_dist, inclusion_req, ax_index, sag_index, 
+                    cor_index, wm_min):
     for search_loc in range(search_dist - 1, search_dist + 2):
         inclusion_count = 0
         if inclusion_count < inclusion_req:
             try:
-                if img_data[ax_index + search_loc][sag_index][cor_index] > wm_min:
+                if (img_data[ax_index + search_loc][sag_index][cor_index] > 
+                    wm_min):
                     inclusion_count +=1
             except:
                 pass
         if inclusion_count < inclusion_req:
             try:
-                if img_data[ax_index][sag_index + search_loc][cor_index] > wm_min:
+                if (img_data[ax_index][sag_index + search_loc][cor_index] > 
+                    wm_min):
                     inclusion_count +=1
             except:
                 pass
         if inclusion_count < inclusion_req:
             try:
-                if img_data[ax_index][sag_index][cor_index + search_loc] > wm_min:
+                if (img_data[ax_index][sag_index][cor_index + search_loc] > 
+                    wm_min):
                     inclusion_count +=1
             except:
                 pass
@@ -196,7 +202,8 @@ def clean_bg(img_data, search_dist, inclusion_req, wm_min, background):
                     for sag_loc in range(sag_index - 1, sag_index + 2):
                         for cor_loc in range(cor_index - 1, cor_index + 2):
                             try:
-                                if img_data[ax_loc][sag_loc][cor_loc] == background:
+                                if (img_data[ax_loc][sag_loc][cor_loc] == 
+                                    background):
                                     iso_count += 1
                             except:
                                 pass
