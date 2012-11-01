@@ -1,13 +1,16 @@
+# This prepares .nii data to be processed by NiftiPyPy. It requires the
+# NumPy and NiBabel libraries.
+
 import marshal
 import nibabel as nib
 import numpy as np
 
-directory = r"C:/NiftiSubjects/BTB-3714_B_01/"
-file_in = "BTB-3714_B_01.nii"
+directory = r"C:/NiftiSubjects/FSL1/"
+file_in = "B-6212_B_01_N3_fslclean1.nii"
 
-#add a temp_file name if you *don't* want to use the input name plus "-tmpdata" and
-#"-tmpaffine"
-#you will need to edit the save and processing files as well
+# Add a temp_file name if you *don't* want to use the input name plus 
+# "-tmpdata" and "-tmpaffine".
+# You will need to edit the save and processing files as well.
 raw_data_suffix = "-tmprawdata"
 affine_suffix = "-tmpaffine"
 zoom_suffix = "-tmpzoom"
@@ -24,17 +27,36 @@ def raw_name(file_in):
     raw_name = file_in[:file_cutoff]
     return raw_name
 
-print "reading files"
+
+def make_copy(img_data):
+    """
+    This is the equivalent of the copy.deepcopy function for the MRI images, 
+    but much faster because it's tailored to this data type. Using deepcopy 
+    instead costs an extra ~5 seconds/copy on my machine with a data set 
+    this large.
+    """
+    img_out = ([[[int(e) for e in sag_row] for sag_row in ax_row] 
+                for ax_row in img_data])
+    return img_out
+
+
+print "Reading files."
 img_data, img_affine, img_zoom = load_file(directory, file_in)
 raw_name = raw_name(file_in)
 
-print "converting arrays and tuples to lists"
+print "Converting arrays and tuples to lists."
 img_data = img_data.tolist()
 img_affine = img_affine.tolist()
 img_zoom = np.array(img_zoom)
 img_zoom = img_zoom.tolist()
+
+if not isinstance(img_data[0][0], int):
+    # necessary to avoid memory errors when making lists, which are common if 
+    # 32-bit floats or above are used for storage.
+    print "Converting to int storage."
+    img_data = make_copy(img_data)
                 
-print "storing data using marshal format"
+print "Storing data using marshal format."
 datafile = open((directory + raw_name + raw_data_suffix), 'w+b')
 marshal.dump(img_data, datafile)
 
@@ -44,4 +66,4 @@ marshal.dump(img_affine, affinefile)
 zoomfile = open((directory + raw_name + zoom_suffix), 'w+b')
 marshal.dump(img_zoom, zoomfile)
 
-print "done"
+print "Done."
