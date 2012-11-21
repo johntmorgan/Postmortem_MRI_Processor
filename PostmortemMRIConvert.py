@@ -9,19 +9,26 @@
 # quickly.
 
 ##############################################################################
-# Variables for user control. 
+# Variables for user control.
+# Each of the following steps is laid out in the order they are executed by 
+# the program. 
 
-directory = r"C:/NiftiSubjects/FSL1/"
-file_in = "B-6212_B_01_N3_fslclean1.nii"
+# Input the directory of file storage and the name of the input file.
+directory = r"C:/NiftiSubjects/FSL4/"
+file_in = "UMB-4226_L_01-mirror6.nii_brain_N3.nii"
+ 
+# If you're running a case that was not scanned using standard M.I.N.D. 
+# Institute parameters, set this to True, and set the white matter and gray 
+# matter cutoff values via manual inspection of the case.
+adjust_intensity = False
+wm_max_start = 1700
+wm_min_start = 500
+gm_max_start = 3000
+gm_min_start = 1700
 
-# How far from each border of the image should the program remove crud, as a 
-# percentage? This does not apply in the rostral-caudal axis, where there is 
-# typically no space. 
-# This option is present because many postmortem images have a bar of bright
-# crud on at least one side that makes by-section normalization difficult.
-# It would probably be most ideal to manually remove this bar from the image
-# prior to sectioning.
-pct_border = .00
+# This setting attempts to detect background pixels near the surface of the 
+# brain with values above zero that have not been removed by pre-processing. 
+clean_up_background = True
 
 # This setting normalizes data with inconsistent scan brightness within a scan.
 normalize_slices = True 
@@ -49,28 +56,28 @@ convert_to_mask = False
 # If making a mask, we need to a series of blurs and sharpens to remove 
 # occasional misidentified, isolated pixels? How many times should this be 
 # performed? More than two repetitions is recommended.
+# This variable has no effect if convert_to_mask is False.
 cleanup_reps = 5
 
 # Freesurfer likes bright images. How much should the image be brightened vs. 
-# background, as a percent? 
-bright_pct = .50
+# background, as a percent? This variable has no effect if convert_to_mask
+# is True.
+brighten_image = True
+bright_pct = .20
 
 
 ##############################################################################
 # It is strongly suggested that these variables not be altered unless you 
 # know exactly what you are doing!
 
-# Set your intensity values manually here.
-# Do not alter if you are using normalization!
-# Normalization assumes wm_max & gm_min = 1700, wm_min = 300, gm_max = 3000, 
-# background = 0
+# Set your target intensity values manually here.
 wm_max = 1700
-wm_min = 500
+wm_min = 300
 gm_max = 3000
 gm_min = 1700
 background = 0
 
-# Normalization intensity
+# Normalization intensity, generally best to put ~5% above wm_max/gm_min cutoff
 norm_intens = 1785
 
 # The intensity we will set our mask at. Don't overlap this with voxel values!
@@ -93,7 +100,7 @@ inclusion_req = 3
 slice_list = (0, 1, 3)
 
 # Normalization point used to compare slices
-norm_intens_pt = 200
+norm_intens_pt = 200 
 
 # How thick is the typical rind, in mm?
 rind_thickness = 0.7
@@ -106,7 +113,7 @@ rind_explore = 1.3
 
 # How many bg voxels need to be found in this space for it to count as a 
 # border cell?
-rind_cutoff = 10
+rind_cutoff = 4
 
 # How far from cortical surfacet to place protective mask, in mm?
 mask_dist = 2.0
@@ -173,6 +180,18 @@ def remove_boundaries(img_data, pct_border, background):
     return img_data
 
 
+def adjust_intens(img_data, wm_max_start, wm_min_start, gm_max_start, 
+                  gm_min_start, wm_max, wm_min, gm_max, gm_min):
+    for ax_row in img_data:
+        for sag_row in ax_row:
+            for cor_ind, voxel in enumerate(sag_row):
+                if wm_max_start >= voxel > wm_min_start:
+                    sag_row[cor_ind] = wm_min + ((wm_max - wm_min) * ((voxel - wm_min_start) / float(wm_max_start - wm_min_start)))
+                elif gm_max_start > voxel > gm_min_start:
+                    sag_row[cor_ind] = gm_min + ((gm_max - gm_min) * ((voxel - gm_min_start) / float(gm_max_start - gm_min_start)))
+    return img_data
+
+
 def isolation_check(search_dist, inclusion_req, ax_ind, sag_ind, 
                     cor_ind, wm_min):
     """
@@ -220,7 +239,7 @@ def iso_px_check(voxel, ax_ind, sag_ind, cor_ind):
     return iso_count
 
 
-def clean_bg(img_data, search_dist, inclusion_req, wm_min, background):
+def clean_bg(img_data, search_dist, inclusion_req, background, wm_min):
     """
     This function cleans isolated pixels in the background prior to image 
     normalization.
@@ -251,7 +270,7 @@ def clean_bg(img_data, search_dist, inclusion_req, wm_min, background):
     return img_data
 
 
-def intensity_norm_calc(intensity_list, cor_loc, slice_dist, gm_max):
+def intensity_norm_calc(intensity_list, slice_loc, slice_dist, gm_max):
     """
     Calculates the average intensity of a coronal section and its neighbors 
     within slice_dist. The neighboring slices are included to prevent 
@@ -259,12 +278,12 @@ def intensity_norm_calc(intensity_list, cor_loc, slice_dist, gm_max):
     (i.e., the rostral and caudal poles of the brain).
     """
     intensity_num = 1
-    intensity_sum = intensity_list[cor_loc]
-    for cor_slice in range(-(slice_dist), slice_dist + 1):
+    intensity_sum = intensity_list[slice_loc]
+    for near_slice in range(-(slice_dist), slice_dist + 1):
         try:
-            if intensity_list[cor_loc + cor_slice] < gm_max:
-                intensity_sum = intensity_sum + intensity_list[cor_loc + 
-                                                               cor_slice]
+            if intensity_list[slice_loc + near_slice] < gm_max:
+                intensity_sum = intensity_sum + intensity_list[slice_loc + 
+                                                               near_slice]
                 intensity_num += 1
         except:
             pass
@@ -272,10 +291,10 @@ def intensity_norm_calc(intensity_list, cor_loc, slice_dist, gm_max):
     return intensity_avg
 
 
-def slice_normalization(img_data, slice_dist, wm_min, wm_max, gm_min, gm_max, 
+def cor_slice_normalization(img_data, slice_dist, wm_min, wm_max, gm_min, gm_max, 
                         norm_intens_pt):
     """
-    Normalize the image intensity across coronal sections. First, this 
+    Normalize the image intensity across coronal sections (most nested level in MRI data). First, this 
     function identifies the 10th brightest pixel in each section. Then, 
     identifies the average of this value across sections. It then takes the 
     average intensity of the section and its neighbors. It then corrects all 
@@ -291,7 +310,7 @@ def slice_normalization(img_data, slice_dist, wm_min, wm_max, gm_min, gm_max,
             for sag_ind, sag_row in enumerate(ax_row):
                 if img_data[ax_ind][sag_ind][cor_loc] > wm_min:
                     cor_list.append(img_data[ax_ind][sag_ind][cor_loc])
-        # find the 10th brightest voxel in the slice
+        # find the xth brightest voxel in the slice
         if cor_list and len(cor_list) > norm_intens_pt:
             cor_list.sort()
             max_intensity = cor_list[-(norm_intens_pt)]
@@ -314,12 +333,12 @@ def slice_normalization(img_data, slice_dist, wm_min, wm_max, gm_min, gm_max,
                 img_data[ax_ind][sag_ind][cor_loc] = (
                     int(img_data[ax_ind][sag_ind][cor_loc] 
                     * float(avg_high_intensity) / float(slice_intensity_avg)))
-    print ("Normalization distance " + str(slice_dist) + " done" + " time: " + 
+    print ("Cor normalization distance " + str(slice_dist) + " done" + " time: " + 
                str(time.clock()))
     return img_data  
 
 
-def find_peak_diff(img_raw):
+def find_peak_diff(img_raw, norm_intens):
     bin_size = 5
     bin_min = 0
     bin_max = 10000
@@ -332,12 +351,15 @@ def find_peak_diff(img_raw):
             pass
     max_bin_val, max_bin_loc = 0, 0
     # look for the mode in the raw data, excluding background
-    for binlist_bin in range(5, bin_max, bin_size):
+    for binlist_bin in range(int(wm_min / bin_size), bin_max, bin_size):
         if bin_list[binlist_bin / bin_size] > max_bin_val:
             max_bin_val = bin_list[binlist_bin / bin_size]
             max_bin_loc = binlist_bin
+    print "max bin loc is: " + str(max_bin_loc)
     # find the difference between the mode and the target peak
     peak_diff = max_bin_loc - norm_intens
+    print "peak diff is: " + str(peak_diff)
+    peak_ratio = norm_intens / max_bin_loc
     return peak_diff
 
 
@@ -356,7 +378,7 @@ def image_normalization(img_data, norm_intens, background):
                 # Selective to reduce memory usage by this variable.
                 if voxel > background:
                     img_raw.append(voxel)      
-    peak_diff = find_peak_diff(img_raw)
+    peak_diff = find_peak_diff(img_raw, norm_intens)
     # Huge memory overhead on this variable.
     del img_raw
     # Adjust all voxels based on the peak difference.
@@ -364,8 +386,7 @@ def image_normalization(img_data, norm_intens, background):
         for sag_ind, sag_row in enumerate(ax_row):
             for cor_ind, voxel in enumerate(sag_row):
                 if voxel > 0:
-                    img_data[ax_ind][sag_ind][cor_ind] = (voxel - 
-                                                                peak_diff)
+                    sag_row[cor_ind] = (voxel - peak_diff)
     return img_data
 
 
@@ -472,7 +493,7 @@ def brain_mask_sag(img_mask, img_data, img_zoom, mask_set, gm_min, background,
     Same function as brain_mask_cor, but in the sagittal axis.
     """         
     for cor_loc in range(len(img_data[0][0])):
-        #make an array containing the contents of each coronal slice
+        # make an array containing the contents of each coronal slice
         cor_grid = [[img_data[ax_entry][sag_entry][cor_loc] 
                      for ax_entry in xrange(len(img_data))] 
                     for sag_entry in xrange(len(img_data[0]))]    
@@ -587,37 +608,12 @@ def remove_rind(img_data, img_zoom, pre_flip, gm_min, gm_max, wm_min, wm_max,
                         if voxel_val:
                             img_chg[ax_ind][sag_ind][cor_ind] = voxel_val     
                         else:
-                            img_chg[ax_ind][sag_ind][cor_ind] = (gm_min + ((gm_max - gm_min) * .20))
+                            img_chg[ax_ind][sag_ind][cor_ind] = (gm_min + ((gm_max - gm_min) * .50))
                         if img_mask[ax_ind][sag_ind][cor_ind] != mask_set:
                             outer_rind_list.append((ax_ind, sag_ind, cor_ind))
         if ax_ind % 20 == 0:                     
             print("Rind row " + str(ax_ind) + " complete. " + "Time: " + 
-                  str(time.clock()))
-    # Make the rind look more natural by using the relative initial values of 
-    # the voxels to slightly tweak the values of the rind voxels. 
-    # This is intended to be purely cosmetic. I've pulled it out of the
-    # calculations above so it's easy to turn off if desired.
-    for vox_ind, voxel in enumerate(outer_rind_list):
-        voxel_diff, voxel_add = 0, 0
-        ax_voxel, sag_voxel, cor_voxel = voxel[0], voxel[1], voxel[2]
-        for ax_loc in range(ax_voxel - r_blur_ax, ax_voxel + r_blur_ax + 
-                            1):
-            for sag_loc in range(sag_voxel - r_blur_sag, sag_voxel + 
-                                 r_blur_sag + 1):
-                for cor_loc in range(cor_voxel - r_blur_cor, cor_voxel + 
-                                     r_blur_cor + 1):
-                    try:
-                        if pre_flip[ax_loc][sag_loc][cor_loc] > background:
-                            voxel_diff = voxel_diff + (pre_flip[ax_loc][sag_loc][cor_loc] - pre_flip[ax_voxel][sag_voxel][cor_voxel])
-                            voxel_add += 1
-                    except:
-                        pass
-        # remove self-count from average difference calculation
-        voxel_add = voxel_add - 1
-        img_chg[ax_voxel][sag_voxel][cor_voxel] = (img_chg[ax_voxel][sag_voxel][cor_voxel] - ((voxel_diff / voxel_add) * .40))
-        if vox_ind % 100000 == 0:                     
-            print("Voxel " + str(vox_ind) + " complete. " + "Time: " + 
-                  str(time.clock()))         
+                  str(time.clock()))     
     return img_chg
 
 
@@ -695,19 +691,24 @@ img_zoom = marshal.load(zoomfile)
 # These functions are left in as an option for users who have some crud in the 
 # background of their image. We remove this crud using a strip in FSL, which
 # also improves the slice normalization procedure dramatically.
-#print "removing junk from the borders of the image"
-#img_data = remove_boundaries(img_data, pct_border, background)
 
-print "Zeroing bright background prior to normalization."
-img_data = clean_bg(img_data, search_dist, inclusion_req, wm_min, background)
+if adjust_intensity:
+    print "Adjusting image intensity."
+    img_data = adjust_intens(img_data, wm_max_start, wm_min_start, 
+                             gm_max_start, gm_min_start, wm_max, wm_min, 
+                             gm_max, gm_min)
+
+if clean_up_background:
+    print "Zeroing dark background prior to normalization."
+    img_data = clean_bg(img_data, search_dist, inclusion_req, background, wm_min)
 
 ##############################################################################
 # Functions that normalize section and image intensity and then flip pixel 
 # intensity are in this section
 
-if intensity_correct and normalize_slices: 
+if normalize_slices: 
     for slice_dist in slice_list:
-        img_data = slice_normalization(img_data, slice_dist, wm_min, wm_max, 
+        img_data = cor_slice_normalization(img_data, slice_dist, wm_min, wm_max, 
                                        gm_min, gm_max, norm_intens_pt)
     
 if normalize_image:
@@ -738,7 +739,7 @@ if remove_wm_rind:
                            wm_max, background, img_mask, mask_set, 
                            rind_thickness, rind_explore, rind_cutoff)
 
-if not convert_to_mask:   
+if not convert_to_mask and brighten_image:   
     img_data = bright_image(img_data, bright_pct)
 
 if convert_to_mask:
@@ -756,8 +757,6 @@ if convert_to_mask:
     img_data = force_mask(img_data, gm_min, gm_max, wm_min, wm_max, 
                           background)
 
-
-    
 
 print "Saving raw data, use NiftiSave.py to convert to .nii."
 datafile = open((directory + raw_name + proc_data_suffix), 'w+b')

@@ -5,8 +5,8 @@ import marshal
 import nibabel as nib
 import numpy as np
 
-directory = r"C:/NiftiSubjects/FSL1/"
-file_in = "B-6212_B_01_N3_fslclean1.nii"
+directory = r"C:/NiftiSubjects/FSL4/"
+file_in = "UMB-4226_L_01-mirror6.nii_brain_N3.nii"
 
 # Add a temp_file name if you *don't* want to use the input name plus 
 # "-tmpdata" and "-tmpaffine".
